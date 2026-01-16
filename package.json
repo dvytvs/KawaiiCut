@@ -1,0 +1,59 @@
+{
+  "name": "KawaiiCut",
+  "version": "1.0.0",
+  "description": "An anime-styled video editing application",
+  "main": "main.js",
+  "scripts": {
+    "start": "concurrently \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "build": "tsc && vite build && electron-builder",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "video-editor",
+    "electron",
+    "react",
+    "anime"
+  ],
+  "homepage": "https://github.com/dvytvs/KawaiiCut",
+  "author": "dvytvs <zapretsystem445@proton.me>",
+  "license": "MIT",
+  "build": {
+    "appId": "com.kawaiicut.app",
+    "productName": "KawaiiCut",
+    "linux": {
+      "icon": "build/icons/linux",
+      "target": [
+        "deb",
+        "pacman",
+        "snap",
+        "tar.gz",
+        "AppImage"
+      ],
+      "category": "Video"
+    },
+    "files": [
+      "dist/**/*",
+      "main.js"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    }
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "lucide-react": "^0.562.0",
+    "idb": "^8.0.0",
+    "@google/genai": "^1.34.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.1"
+  }
+}

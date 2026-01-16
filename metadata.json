@@ -1,0 +1,7 @@
+{
+  "name": "KawaiiCut",
+  "description": "An anime-styled video editing prototype inspired by CapCut Desktop, featuring a timeline, media pool, and AI assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
