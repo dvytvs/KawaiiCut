@@ -1,3 +1,7 @@
+
+<img width="512" height="512" alt="icon" src="https://github.com/user-attachments/assets/503912e0-37a7-4f58-920d-5f0ec73c89da" />
+
+
 # ✨ KawaiiCut
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
