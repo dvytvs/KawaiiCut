@@ -1,0 +1,7 @@
+{
+  "name": "KawaiiCut",
+  "description": "A powerful video editing prototype similar to Clipchamp, featuring a timeline, media pool, and AI assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
