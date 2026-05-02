@@ -1,6 +1,8 @@
-import React from 'react';
-import { Type, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Type, Plus, DownloadCloud, Upload, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import { TextData } from '../types';
+import { loadGlobalFonts, saveGlobalFont, fileToDataURL } from '../utils/db';
+import { detectLocalFontsFallback, OS_FONT_CANDIDATES } from '../utils/fonts';
 
 interface TextPanelProps {
   onDragStart: (e: React.DragEvent, textData: TextData) => void;
@@ -104,6 +106,112 @@ const PRESETS: { name: string; previewClass: string; data: TextData }[] = [
 ];
 
 export const TextPanel: React.FC<TextPanelProps> = ({ onDragStart }) => {
+  const [systemFonts, setSystemFonts] = useState<{name: string, value: string}[]>([]);
+  const [customLoadedFonts, setCustomLoadedFonts] = useState<{name: string, value: string}[]>([]);
+  
+  const [showPresets, setShowPresets] = useState(true);
+  const [showSystemFonts, setShowSystemFonts] = useState(false);
+  const [showCustomFonts, setShowCustomFonts] = useState(true);
+
+  useEffect(() => {
+      const loadInitialCustomFonts = async () => {
+          const fonts = await loadGlobalFonts();
+          setCustomLoadedFonts(fonts.map(f => ({ name: f.name, value: `"${f.name}"` })));
+      };
+      loadInitialCustomFonts();
+  }, []);
+
+  const handleLoadSystemFonts = async () => {
+      let fontsList: string[] = [];
+      try {
+          if ('queryLocalFonts' in window) {
+              const fonts = await (window as any).queryLocalFonts();
+              fontsList = Array.from(new Set(fonts.map((f: any) => f.family))) as string[];
+          }
+      } catch (e) {
+          console.warn('queryLocalFonts permission denied or API error', e);
+      }
+      
+      if (fontsList.length === 0) {
+          fontsList = detectLocalFontsFallback();
+      }
+      
+      fontsList.sort((a,b) => a.localeCompare(b));
+      setSystemFonts(fontsList.map(f => ({ name: f, value: `"${f}"` })));
+      setShowSystemFonts(true);
+  };
+
+  const handleLoadCustomFontFiles = (isFolder: boolean) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      if (isFolder) {
+          input.webkitdirectory = true;
+      } else {
+          input.accept = '.ttf,.otf,.woff,.woff2';
+          input.multiple = true;
+      }
+      
+      input.onchange = async (e) => {
+          const files = (e.target as HTMLInputElement).files;
+          if (!files) return;
+
+          const newFonts: {name: string, value: string}[] = [];
+          for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              if (!file.name.match(/\.(ttf|otf|woff|woff2)$/i)) continue;
+
+              const fontName = file.name.split('.')[0];
+              const dataUrl = await fileToDataURL(file);
+              const fontFace = new FontFace(fontName, `url(${dataUrl})`);
+              try {
+                  await fontFace.load();
+                  document.fonts.add(fontFace);
+                  await saveGlobalFont(fontName, dataUrl);
+                  newFonts.push({ name: fontName, value: `"${fontName}"` });
+              } catch (err) {
+                  console.error('Failed to load font', file.name, err);
+              }
+          }
+          if (newFonts.length > 0) {
+              setCustomLoadedFonts(prev => {
+                  const merged = [...prev, ...newFonts];
+                  // deduplicate
+                  const unique = merged.filter((v, i, a) => a.findIndex(t => t.name === v.name) === i);
+                  return unique;
+              });
+              setShowCustomFonts(true);
+          }
+      };
+      input.click();
+  };
+
+  const renderFontItem = (name: string, fontFamily: string, previewText: string = 'Текст', isFallback = false) => {
+      const textData: TextData = {
+          content: previewText,
+          fontFamily,
+          fontSize: 60,
+          color: '#ffffff',
+          align: 'center'
+      };
+
+      return (
+          <div 
+              key={name}
+              draggable
+              onDragStart={(e) => onDragStart(e, textData)}
+              className="group bg-bg-input hover:bg-bg-card border border-transparent hover:border-primary/50 rounded p-3 cursor-grab active:cursor-grabbing transition-all flex flex-col items-center justify-center min-h-[60px] relative hover:scale-105 duration-200"
+          >
+              <div className="text-[10px] text-text-muted mb-1 w-full text-center truncate">{name}</div>
+              <span className="text-xl pointer-events-none" style={{ fontFamily: isFallback ? `"${name}", sans-serif` : fontFamily }}>
+                  {previewText}
+              </span>
+              <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none rounded">
+                  <Plus size={20} className="text-text-main drop-shadow" />
+              </div>
+          </div>
+      );
+  };
+
   return (
     <div className="flex flex-col h-full bg-bg-panel text-text-main animate-fade-in transition-colors">
       <div className="p-4 border-b border-black/20">
@@ -114,25 +222,92 @@ export const TextPanel: React.FC<TextPanelProps> = ({ onDragStart }) => {
         <p className="text-xs text-text-muted mt-1">Перетащите стиль на таймлайн</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-         <div className="grid grid-cols-1 gap-4">
-            {PRESETS.map((preset, idx) => (
-                <div 
-                    key={idx}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, preset.data)}
-                    className="group bg-bg-input hover:bg-bg-card border border-transparent hover:border-primary/50 rounded-lg p-4 cursor-grab active:cursor-grabbing transition-all flex flex-col items-center justify-center min-h-[100px] relative hover:scale-105 duration-200"
-                >
-                    <div className="absolute top-2 left-2 text-[10px] text-text-muted font-mono uppercase opacity-50">{preset.name}</div>
-                    <span className={`text-2xl ${preset.previewClass} pointer-events-none`}>
-                        Текст
-                    </span>
-                    <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none rounded-lg">
-                        <Plus size={24} className="text-text-main drop-shadow-md" />
-                    </div>
-                </div>
-            ))}
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+         
+         {/* PRESETS SECTION */}
+         <div>
+             <button onClick={() => setShowPresets(!showPresets)} className="flex items-center gap-2 w-full text-left font-bold text-sm text-text-main mb-2 hover:text-primary transition-colors">
+                 {showPresets ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                 Шаблоны
+             </button>
+             {showPresets && (
+                 <div className="grid grid-cols-1 gap-3">
+                    {PRESETS.map((preset, idx) => (
+                        <div 
+                            key={idx}
+                            draggable
+                            onDragStart={(e) => onDragStart(e, preset.data)}
+                            className="group bg-bg-input hover:bg-bg-card border border-transparent hover:border-primary/50 rounded p-4 cursor-grab active:cursor-grabbing transition-all flex flex-col items-center justify-center min-h-[80px] relative hover:scale-105 duration-200"
+                        >
+                            <div className="absolute top-2 left-2 text-[10px] text-text-muted font-mono uppercase opacity-50">{preset.name}</div>
+                            <span className={`text-2xl ${preset.previewClass} pointer-events-none`}>
+                                Текст
+                            </span>
+                            <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none rounded">
+                                <Plus size={24} className="text-text-main drop-shadow-md" />
+                            </div>
+                        </div>
+                    ))}
+                 </div>
+             )}
          </div>
+
+         {/* CUSTOM FONTS SECTION */}
+         <div>
+             <div className="flex items-center justify-between mb-2">
+                 <button onClick={() => setShowCustomFonts(!showCustomFonts)} className="flex items-center gap-2 font-bold text-sm text-text-main hover:text-primary transition-colors">
+                     {showCustomFonts ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                     Мои Шрифты
+                 </button>
+                 <div className="flex gap-1">
+                     <button title="Загрузить файл шрифта" onClick={() => handleLoadCustomFontFiles(false)} className="p-1.5 bg-bg-input hover:bg-bg-card border border-text-muted/20 rounded text-text-muted hover:text-primary transition-colors">
+                         <Upload size={14} />
+                     </button>
+                     <button title="Загрузить папку шрифтов" onClick={() => handleLoadCustomFontFiles(true)} className="p-1.5 bg-bg-input hover:bg-bg-card border border-text-muted/20 rounded text-text-muted hover:text-primary transition-colors">
+                         <FolderOpen size={14} />
+                     </button>
+                 </div>
+             </div>
+             {showCustomFonts && (
+                 <div className="grid grid-cols-2 gap-2">
+                     {customLoadedFonts.length === 0 ? (
+                         <div className="col-span-2 text-xs text-text-muted p-4 text-center border border-dashed border-text-muted/20 rounded">
+                             Вы можете загрузить свои шрифты (.ttf, .otf, .woff)
+                         </div>
+                     ) : (
+                         customLoadedFonts.map(f => renderFontItem(f.name, f.value, f.name))
+                     )}
+                 </div>
+             )}
+         </div>
+
+         {/* SYSTEM FONTS SECTION */}
+         <div>
+             <div className="flex items-center justify-between mb-2">
+                 <button onClick={() => setShowSystemFonts(!showSystemFonts)} className="flex items-center gap-2 font-bold text-sm text-text-main hover:text-primary transition-colors">
+                     {showSystemFonts ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                     Системные Шрифты
+                 </button>
+                 {systemFonts.length === 0 && (
+                     <button title="Сканировать системные шрифты" onClick={handleLoadSystemFonts} className="p-1.5 bg-bg-input hover:bg-bg-card border border-text-muted/20 rounded text-text-muted hover:text-primary transition-colors">
+                         <DownloadCloud size={14} />
+                     </button>
+                 )}
+             </div>
+             {showSystemFonts ? (
+                 systemFonts.length === 0 ? (
+                     <div className="text-xs text-text-muted p-4 text-center border border-dashed border-text-muted/20 rounded flex flex-col items-center gap-2">
+                         <span>Нажмите кнопку для поиска системных шрифтов</span>
+                         <button onClick={handleLoadSystemFonts} className="px-3 py-1 bg-primary text-white rounded text-xs font-medium hover:bg-primary/80">Сканировать</button>
+                     </div>
+                 ) : (
+                     <div className="grid grid-cols-2 gap-2 pb-10">
+                         {systemFonts.map(f => renderFontItem(f.name, f.value, f.name, true))}
+                     </div>
+                 )
+             ) : null}
+         </div>
+
       </div>
     </div>
   );

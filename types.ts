@@ -79,6 +79,7 @@ export interface Clip {
   opacity: number;
   mirror: boolean;
   speed: number; // New: Playback speed (1.0 is normal)
+  volume: number; // Audio volume (0 is muted, 1 is normal)
   
   // Specific Data
   textData?: TextData;

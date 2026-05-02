@@ -17,6 +17,7 @@ interface TimelineProps {
   onDropText: (textDataStr: string, trackId: string, time: number) => void;
   onDropEffect: (effectType: string, trackId: string, time: number) => void;
   onAddTrack: () => void;
+  onSplitClip: (id: string, time: number) => void;
 }
 
 const HEADER_HEIGHT = 32;
@@ -37,10 +38,23 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDropAsset,
   onDropText,
   onDropEffect,
-  onAddTrack
+  onAddTrack,
+  onSplitClip
 }) => {
   const rulerRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const headersRef = useRef<HTMLDivElement>(null);
+
+  const [activeTool, setActiveTool] = useState<'pointer' | 'blade'>('pointer');
+  
+  const [isRazorSwiping, setIsRazorSwiping] = useState(false);
+  const [razorX, setRazorX] = useState<number>(0);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+      if (headersRef.current) {
+          headersRef.current.scrollTop = e.currentTarget.scrollTop;
+      }
+  };
   
   // Interaction States
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
@@ -77,21 +91,23 @@ export const Timeline: React.FC<TimelineProps> = ({
     onSeek(newTime);
   };
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (isDraggingPlayhead) {
-      const newTime = getTimeFromMouse(e.clientX);
-      onSeek(newTime);
-    }
-  }, [isDraggingPlayhead, zoom, onSeek]);
-
   const handleMouseUp = useCallback(() => {
+    if (isRazorSwiping) {
+        setIsRazorSwiping(false);
+        const time = Math.max(0, razorX / zoom);
+        clips.forEach(clip => {
+            if (time > clip.startTime + 0.1 && time < clip.startTime + clip.duration - 0.1) {
+                onSplitClip(clip.id, time);
+            }
+        });
+    }
     setIsDraggingPlayhead(false);
     setDraggingClip(null);
     setResizingClip(null);
-  }, []);
+  }, [isRazorSwiping, razorX, zoom, clips, onSplitClip]);
 
   useEffect(() => {
-    if (isDraggingPlayhead || draggingClip || resizingClip) {
+    if (isDraggingPlayhead || draggingClip || resizingClip || isRazorSwiping) {
       window.addEventListener('mousemove', handleGlobalMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     } 
@@ -99,12 +115,16 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', handleGlobalMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingPlayhead, draggingClip, resizingClip]);
+  }, [isDraggingPlayhead, draggingClip, resizingClip, isRazorSwiping, handleMouseUp]);
 
 
   // --- CLIP INTERACTION LOGIC ---
   const handleClipMouseDown = (e: React.MouseEvent, clip: Clip) => {
+    if (activeTool === 'blade') {
+      return; // Allows event to bubble to container's handleTimelineMouseDown
+    }
     e.stopPropagation();
+    
     onSelectClip(clip.id);
     setDraggingClip({
       id: clip.id,
@@ -169,17 +189,31 @@ export const Timeline: React.FC<TimelineProps> = ({
           const newStartTime = Math.max(0, draggingClip.originalStartTime + deltaTime);
           onUpdateClip(draggingClip.id, { startTime: newStartTime });
       } else if (isDraggingPlayhead) {
-          handleMouseMove(e);
+          const newTime = getTimeFromMouse(e.clientX);
+          onSeek(newTime);
+      }
+  };
+
+  const handleTimelineMouseDown = (e: React.MouseEvent) => {
+      if (activeTool === 'blade') {
+          // If we click on an empty space, start blade swiping
+          setIsRazorSwiping(true);
+          const time = getTimeFromMouse(e.clientX);
+          setRazorX(time * zoom);
+      } else {
+          onSelectClip(null);
       }
   };
 
   // --- DROP ---
   const handleDragOver = (e: React.DragEvent, trackId: string) => {
+      if (e.dataTransfer.types.includes('Files')) return; // Allow bubble to App.tsx
       e.preventDefault(); e.stopPropagation();
       e.dataTransfer.dropEffect = 'copy';
       if (draggedOverTrack !== trackId) setDraggedOverTrack(trackId);
   };
   const handleDropOnTrack = (e: React.DragEvent, trackId: string) => {
+      if (e.dataTransfer.types.includes('Files')) return; // Allow bubble to App.tsx
       e.preventDefault(); e.stopPropagation();
       setDraggedOverTrack(null);
       
@@ -206,13 +240,42 @@ export const Timeline: React.FC<TimelineProps> = ({
   const timelineContentWidth = Math.max(window.innerWidth - LEFT_PANEL_WIDTH, (duration + 60) * zoom);
 
   return (
-    <div className="flex h-full bg-bg-timeline select-none overflow-hidden text-gray-300">
-        {/* Left Track Headers */}
-        <div className="w-[100px] flex-shrink-0 bg-bg-panel border-r border-black/30 z-20 flex flex-col shadow-lg">
-          <div style={{ height: HEADER_HEIGHT }} className="border-b border-black/30 bg-bg-panel shrink-0 flex items-center px-2">
-             <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Tracks</span>
-          </div>
-          <div className="flex-1 overflow-y-hidden">
+    <div className="flex flex-col h-full bg-bg-timeline select-none overflow-hidden text-gray-300">
+        {/* Toolbar */}
+        <div className="h-10 bg-bg-panel border-b border-black/30 flex items-center px-4 gap-2 z-30 shrink-0">
+            <button 
+                onClick={() => setActiveTool('pointer')} 
+                className={`p-1.5 rounded transition-all ${activeTool === 'pointer' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                title="Select Tool (V)"
+            >
+                <div className="w-4 h-4 border-l-2 border-t-2 border-current transform -rotate-45 translate-x-1 translate-y-1"></div>
+            </button>
+            <button 
+                onClick={() => setActiveTool(activeTool === 'blade' ? 'pointer' : 'blade')} 
+                className={`p-1.5 rounded transition-all ${activeTool === 'blade' ? 'bg-primary text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
+                title="Blade Tool (Split)"
+            >
+                <Scissors size={16} />
+            </button>
+            <div className="w-px h-4 bg-gray-700 mx-2"></div>
+            {selectedClipId && (
+                <button 
+                     onClick={() => onSplitClip(selectedClipId, currentTime)} 
+                     className="text-[11px] font-medium px-2 py-1 bg-white/5 hover:bg-white/10 rounded flex items-center gap-1 transition-colors"
+                >
+                    Split at Playhead
+                </button>
+            )}
+        </div>
+
+        {/* Timeline Content */}
+        <div className="flex flex-1 overflow-hidden">
+            {/* Left Track Headers */}
+            <div className="w-[100px] flex-shrink-0 bg-bg-panel border-r border-black/30 z-20 flex flex-col shadow-lg">
+              <div style={{ height: HEADER_HEIGHT }} className="border-b border-black/30 bg-bg-panel shrink-0 flex items-center px-2">
+                 <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Tracks</span>
+              </div>
+              <div className="flex-1 overflow-y-hidden custom-scrollbar" ref={headersRef}>
              {tracks.map(track => (
                 <div key={track.id} style={{ height: TRACK_HEIGHT }} className="border-b border-black/20 px-2 flex flex-col justify-center relative hover:bg-white/5 transition-colors">
                     <div className="flex items-center justify-between mb-1">
@@ -232,8 +295,24 @@ export const Timeline: React.FC<TimelineProps> = ({
         </div>
 
         {/* Right Scrolling Timeline */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative" ref={scrollContainerRef}>
-            <div style={{ width: timelineContentWidth, minWidth: '100%' }} className="relative h-full">
+        <div 
+           className={`flex-1 overflow-x-auto overflow-y-auto custom-scrollbar relative ${activeTool === 'blade' ? 'cursor-crosshair' : ''}`}
+           ref={scrollContainerRef} 
+           onScroll={handleScroll}
+           onMouseDown={handleTimelineMouseDown}
+        >
+            <div style={{ width: timelineContentWidth, minWidth: '100%' }} className="relative min-h-full">
+                {/* Razor Swipe Line Overlay */}
+                {isRazorSwiping && (
+                    <div 
+                        className="absolute top-0 bottom-0 w-px bg-red-500 z-50 pointer-events-none"
+                        style={{ left: razorX }}
+                    >
+                        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 border-x-[6px] border-x-transparent border-t-[8px] border-t-red-500"></div>
+                        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 border-x-[6px] border-x-transparent border-b-[8px] border-b-red-500"></div>
+                    </div>
+                )}
+                
                 {/* Ruler */}
                 <div 
                     ref={rulerRef}
@@ -282,9 +361,9 @@ export const Timeline: React.FC<TimelineProps> = ({
                                     <div
                                         key={clip.id}
                                         onMouseDown={(e) => handleClipMouseDown(e, clip)}
-                                        className={`absolute top-1 bottom-1 rounded-[4px] cursor-move overflow-hidden group ${bgClass}`}
+                                        className={`absolute top-1 bottom-1 rounded-[4px] overflow-hidden group ${bgClass} ${activeTool === 'blade' ? 'cursor-crosshair' : 'cursor-move'}`}
                                         style={{ left: clip.startTime * zoom, width: clip.duration * zoom }}
-                                        title="Click to select, Drag to move, Delete key to remove"
+                                        title={activeTool === 'blade' ? "Click or drag across to cut" : "Click to select, Drag to move, Delete key to remove"}
                                     >
                                         <div className="w-full h-full px-2 flex items-center justify-between">
                                              <span className={`text-[10px] font-medium truncate select-none ${isSelected ? 'text-white' : 'text-gray-300'}`}>
@@ -308,6 +387,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                     ))}
                 </div>
             </div>
+        </div>
         </div>
     </div>
   );

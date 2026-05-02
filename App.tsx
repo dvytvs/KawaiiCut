@@ -16,7 +16,8 @@ import {
     deleteProjectFromDB, softDeleteProjectInDB, restoreProjectInDB, 
     emptyTrashInDB, fileToDataURL, 
     loadUserProfile, saveUserProfile, 
-    loadAppSettings, saveAppSettings 
+    loadAppSettings, saveAppSettings,
+    loadGlobalFonts, saveGlobalFont
 } from './utils/db';
 
 const INITIAL_TRACKS: Track[] = [
@@ -54,12 +55,23 @@ export default function App() {
   // --- INIT ---
   useEffect(() => {
     const initApp = async () => {
-        const [savedUser, savedSettings, metas] = await Promise.all([
-            loadUserProfile(), loadAppSettings(), loadProjectsMeta()
+        const [savedUser, savedSettings, metas, globalFonts] = await Promise.all([
+            loadUserProfile(), loadAppSettings(), loadProjectsMeta(), loadGlobalFonts()
         ]);
         if (savedUser) setUser(savedUser);
         if (savedSettings) setSettings(savedSettings);
         setProjectsList(metas.sort((a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()));
+        
+        for (const font of globalFonts) {
+            try {
+                const fontFace = new FontFace(font.name, `url(${font.dataUrl})`);
+                await fontFace.load();
+                document.fonts.add(fontFace);
+            } catch (err) {
+                console.error(`Failed to load global font ${font.name}:`, err);
+            }
+        }
+
         setIsLoaded(true);
     };
     initApp();
@@ -210,13 +222,13 @@ export default function App() {
       
       for (const type of types) {
           if (MediaRecorder.isTypeSupported(type)) {
-              options = { mimeType: type };
+              options = { mimeType: type, videoBitsPerSecond: 80000000 };
               break;
           }
       }
 
       try {
-          const mediaRecorder = new MediaRecorder(combinedStream, { ...options, videoBitsPerSecond: 10000000 }); 
+          const mediaRecorder = new MediaRecorder(combinedStream, options); 
           mediaRecorder.ondataavailable = (event) => {
               if (event.data.size > 0) {
                   recordedChunksRef.current.push(event.data);
@@ -283,7 +295,7 @@ export default function App() {
       if (!asset) return;
       const newClip: Clip = {
           id: Math.random().toString(36).substr(2, 9), assetId: asset.id, trackId: trackId, startTime: time, duration: asset.duration,
-          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, effectType: asset.effectType
+          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, volume: 1.0, effectType: asset.effectType
       };
       setProject(p => p ? recalculateProject({ ...p, clips: [...p.clips, newClip], selectedClipId: newClip.id }) : null);
   };
@@ -293,7 +305,7 @@ export default function App() {
       const newAsset: Asset = { id: textAssetId, name: 'Текст', type: AssetType.TEXT, src: '', duration: 5 };
       const newClip: Clip = {
           id: Math.random().toString(36).substr(2, 9), assetId: textAssetId, trackId: trackId, startTime: time, duration: 5,
-          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, textData
+          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, volume: 1.0, textData
       };
       setProject(p => p ? recalculateProject({ ...p, assets: [...p.assets, newAsset], clips: [...p.clips, newClip], selectedClipId: newClip.id }) : null);
   };
@@ -303,7 +315,7 @@ export default function App() {
       const newAsset: Asset = { id: effectAssetId, name: effectType, type: AssetType.EFFECT, src: '', duration: 5, effectType };
       const newClip: Clip = {
           id: Math.random().toString(36).substr(2, 9), assetId: effectAssetId, trackId: trackId, startTime: time, duration: 5,
-          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, effectType
+          offset: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, mirror: false, speed: 1.0, volume: 1.0, effectType
       };
       setProject(p => p ? recalculateProject({ ...p, assets: [...p.assets, newAsset], clips: [...p.clips, newClip], selectedClipId: newClip.id }) : null);
   };
@@ -360,6 +372,40 @@ export default function App() {
       });
   };
 
+  const handleSplitClip = (id: string, time: number) => {
+      setProject(p => {
+          if (!p) return null;
+          const clipIndex = p.clips.findIndex(c => c.id === id);
+          if (clipIndex === -1) return p;
+          
+          const clip = p.clips[clipIndex];
+          
+          // Only split if time is strictly inside the clip bounds
+          if (time <= clip.startTime + 0.1 || time >= clip.startTime + clip.duration - 0.1) return p;
+          
+          const durationCut = time - clip.startTime;
+          
+          const firstHalf = {
+              ...clip,
+              duration: durationCut
+          };
+          
+          const secondHalf = {
+              ...clip,
+              id: `clip-${Math.random()}`,
+              startTime: time,
+              duration: clip.duration - durationCut,
+              offset: clip.offset + durationCut
+          };
+          
+          const newClips = [...p.clips];
+          newClips[clipIndex] = firstHalf;
+          newClips.push(secondHalf);
+          
+          return { ...p, clips: newClips };
+      });
+  };
+
   // Keyboard Shortcuts
   useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
@@ -380,13 +426,59 @@ export default function App() {
       return () => window.removeEventListener('keydown', handleKeyDown);
   }, [project?.selectedClipId]);
 
+  const handleGlobalDragOver = (e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+      }
+  };
+
+  const handleGlobalDrop = async (e: React.DragEvent) => {
+      // If we're dropping straight into timeline or player, the event might bubble up here.
+      // E.g. we want to allow font dropping globally.
+      if (e.dataTransfer.types.includes('Files') && e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          const files = Array.from(e.dataTransfer.files);
+          for (const file of files) {
+              if (file.type.startsWith('video') || file.type.startsWith('image') || file.type.startsWith('audio')) {
+                  await handleAddAsset(file);
+              } else if (file.name.match(/\.(ttf|otf|woff|woff2)$/i)) {
+                  try {
+                      const fontName = file.name.split('.')[0];
+                      const dataUrl = await fileToDataURL(file);
+                      const fontFace = new FontFace(fontName, `url(${dataUrl})`);
+                      await fontFace.load();
+                      document.fonts.add(fontFace);
+                      await saveGlobalFont(fontName, dataUrl);
+                      
+                      // Update active text clip if available
+                      if (project?.selectedClipId) {
+                          const clip = project.clips.find(c => c.id === project.selectedClipId);
+                          if (clip && clip.textData) {
+                              handleUpdateClip(clip.id, { textData: { ...clip.textData, fontFamily: `"${fontName}"` } });
+                          }
+                      }
+                      alert(`Шрифт ${fontName} успешно загружен!`);
+                  } catch (err) {
+                      console.error('Failed to load font from drop', err);
+                      alert('Ошибка при загрузке шрифта.');
+                  }
+              }
+          }
+      }
+  };
+
   if (view === 'settings') return <SettingsPage user={user} settings={settings} onUpdateUser={u => setUser({...user, ...u})} onUpdateSettings={s => setSettings({...settings, ...s})} onBack={() => setView('dashboard')} />;
   if (view === 'dashboard') return <Dashboard projects={projectsList} user={user} lang={settings.language} onCreateProject={handleCreateProject} onOpenProject={handleOpenProject} onMoveToTrash={(id) => {setProjectsList(p => p.map(pr => pr.id === id ? {...pr, isDeleted: true} : pr)); softDeleteProjectInDB(id);}} onRestoreProject={(id) => {setProjectsList(p => p.map(pr => pr.id === id ? {...pr, isDeleted: false} : pr)); restoreProjectInDB(id);}} onPermanentDelete={(id) => {setProjectsList(p => p.filter(pr => pr.id !== id)); deleteProjectFromDB(id);}} onEmptyTrash={() => {if(window.confirm(t('emptyTrashConfirm', settings.language))) {setProjectsList(p => p.filter(pr => !pr.isDeleted)); emptyTrashInDB();}}} onOpenSettings={() => setView('settings')} />;
 
   const selectedClip = project?.clips.find(c => c.id === project.selectedClipId) || null;
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden font-sans bg-bg-main text-text-main animate-fade-in relative">
+    <div 
+        className="flex flex-col h-screen w-screen overflow-hidden font-sans bg-bg-main text-text-main animate-fade-in relative"
+        onDragOver={handleGlobalDragOver}
+        onDrop={handleGlobalDrop}
+    >
         {/* Render Overlay */}
         {isRendering && (
             <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center cursor-wait">
@@ -460,6 +552,7 @@ export default function App() {
                         {project && (
                             <Player 
                                 ref={playerRef}
+                                isExporting={isRendering}
                                 isPlaying={project.isPlaying} currentTime={project.currentTime} duration={project.duration}
                                 clips={project.clips} tracks={project.tracks} assets={project.assets} aspectRatio={project.meta.aspectRatio}
                                 selectedClipId={project.selectedClipId}
@@ -477,7 +570,6 @@ export default function App() {
                                 onSelectClip={(id) => setProject(p => p ? ({ ...p, selectedClipId: id }) : null)}
                                 onDropAsset={(assetId) => handleAddClip(assetId, 'track-1', project.currentTime)}
                                 onDropText={(textData) => handleAddTextClip(textData, 'track-1', project.currentTime)}
-                                isExporting={isRendering}
                             />
                         )}
                     </div>
@@ -499,6 +591,7 @@ export default function App() {
                             onDropText={(textDataStr, trackId, time) => handleDropGlobal(null, textDataStr, null, trackId, time)}
                             onDropEffect={(effectType, trackId, time) => handleDropGlobal(null, null, effectType, trackId, time)}
                             onAddTrack={() => setProject(p => p ? {...p, tracks: [...p.tracks, { id: `track-${Math.random()}`, name: `Track ${p.tracks.length+1}`, type: 'video', isMuted: false, isLocked: false }]} : null)}
+                            onSplitClip={handleSplitClip}
                         />
                     )}
                  </div>
@@ -511,6 +604,7 @@ export default function App() {
                  <div className="absolute top-0 left-0 bottom-0 w-1 cursor-col-resize hover:bg-primary z-50 transition-colors opacity-0 group-hover:opacity-100" onMouseDown={() => setIsResizing('right')} />
                  <PropertiesPanel 
                     selectedClip={selectedClip} 
+                    assets={project?.assets || []}
                     onUpdate={(u) => selectedClip && handleUpdateClip(selectedClip.id, u)} 
                     onDelete={() => selectedClip && handleDeleteClip(selectedClip.id)}
                  />

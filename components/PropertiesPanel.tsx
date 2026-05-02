@@ -1,14 +1,27 @@
-import React from 'react';
-import { Clip } from '../types';
-import { Sliders, RefreshCcw, LayoutTemplate, Type, Palette, Zap, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Clip, Asset, AssetType } from '../types';
+import { Sliders, RefreshCcw, LayoutTemplate, Type, Palette, Zap, Trash2, Volume2 } from 'lucide-react';
+import { loadGlobalFonts, saveGlobalFont, fileToDataURL } from '../utils/db';
+import { OS_FONT_CANDIDATES } from '../utils/fonts';
 
 interface PropertiesPanelProps {
   selectedClip: Clip | null;
+  assets: Asset[];
   onUpdate: (updates: Partial<Clip>) => void;
   onDelete?: () => void;
 }
 
-export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, onUpdate, onDelete }) => {
+export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, assets, onUpdate, onDelete }) => {
+  const [customLoadedFonts, setCustomLoadedFonts] = useState<{name: string, value: string}[]>([]);
+
+  useEffect(() => {
+      const loadInitialCustomFonts = async () => {
+          const fonts = await loadGlobalFonts();
+          setCustomLoadedFonts(fonts.map(f => ({ name: f.name, value: `"${f.name}"` })));
+      };
+      loadInitialCustomFonts();
+  }, []);
+
   if (!selectedClip) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-text-muted p-6 text-center bg-bg-panel animate-fade-in transition-colors">
@@ -18,6 +31,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, 
       </div>
     );
   }
+
+  const selectedAsset = assets.find(a => a.id === selectedClip.assetId);
 
   const handleTextUpdate = (field: string, value: any) => {
       if (!selectedClip.textData) return;
@@ -81,32 +96,41 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, 
                             value={selectedClip.textData.fontFamily}
                             onChange={(e) => handleTextUpdate('fontFamily', e.target.value)}
                         >
-                            <option value="Inter, sans-serif">Inter (Обычный)</option>
-                            <option value="Roboto, sans-serif">Roboto</option>
-                            <option value="Anton, sans-serif">Anton (Жирный)</option>
-                            <option value="Bangers, cursive">Bangers (Комикс)</option>
-                            <option value="Orbitron, sans-serif">Orbitron (Кибер)</option>
-                            <option value="Pacifico, cursive">Pacifico (Рукопись)</option>
-                            <option value="Montserrat, sans-serif">Montserrat</option>
-                            <option value="Lobster, cursive">Lobster</option>
-                            <option value="Oswald, sans-serif">Oswald</option>
-                            <option value="Playfair Display, serif">Playfair (Элегант)</option>
-                            <option value="Permanent Marker, cursive">Marker</option>
-                            <option value="Comfortaa, cursive">Comfortaa</option>
-                            {/* New Fonts */}
-                            <option value="Dancing Script, cursive">Dancing Script</option>
-                            <option value="Caveat, cursive">Caveat</option>
-                            <option value="Shadows Into Light, cursive">Shadows</option>
-                            <option value="Abril Fatface, cursive">Abril Fatface</option>
-                            <option value="Righteous, cursive">Righteous</option>
-                            <option value="Fredoka One, cursive">Fredoka One</option>
-                            <option value="Monoton, cursive">Monoton</option>
-                            <option value="Creepster, cursive">Creepster</option>
-                            <option value="Gloria Hallelujah, cursive">Gloria</option>
-                            <option value="Cinzel, serif">Cinzel</option>
-                            <option value="Courgette, cursive">Courgette</option>
-                            <option value="Russo One, sans-serif">Russo One</option>
-                            <option value="Press Start 2P, cursive">Pixel</option>
+                            <optgroup label="Веб-шрифты (Google)">
+                                <option value="Inter, sans-serif">Inter (Обычный)</option>
+                                <option value="Roboto, sans-serif">Roboto</option>
+                                <option value="Anton, sans-serif">Anton (Жирный)</option>
+                                <option value="Bangers, cursive">Bangers (Комикс)</option>
+                                <option value="Orbitron, sans-serif">Orbitron (Кибер)</option>
+                                <option value="Pacifico, cursive">Pacifico (Рукопись)</option>
+                                <option value="Montserrat, sans-serif">Montserrat</option>
+                                <option value="Lobster, cursive">Lobster</option>
+                                <option value="Oswald, sans-serif">Oswald</option>
+                                <option value="Playfair Display, serif">Playfair (Элегант)</option>
+                                <option value="Permanent Marker, cursive">Marker</option>
+                                <option value="Comfortaa, cursive">Comfortaa</option>
+                                <option value="Dancing Script, cursive">Dancing Script</option>
+                                <option value="Caveat, cursive">Caveat</option>
+                                <option value="Shadows Into Light, cursive">Shadows</option>
+                                <option value="Abril Fatface, cursive">Abril Fatface</option>
+                                <option value="Righteous, cursive">Righteous</option>
+                                <option value="Fredoka One, cursive">Fredoka One</option>
+                                <option value="Monoton, cursive">Monoton</option>
+                                <option value="Creepster, cursive">Creepster</option>
+                                <option value="Gloria Hallelujah, cursive">Gloria</option>
+                                <option value="Cinzel, serif">Cinzel</option>
+                                <option value="Courgette, cursive">Courgette</option>
+                                <option value="Russo One, sans-serif">Russo One</option>
+                                <option value="Press Start 2P, cursive">Pixel</option>
+                            </optgroup>
+                            {customLoadedFonts.length > 0 && (
+                                <optgroup label="Загруженные из файлов">
+                                    {customLoadedFonts.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
+                                </optgroup>
+                            )}
+                            <optgroup label="Все Системные Шрифты">
+                                {OS_FONT_CANDIDATES.map(f => <option key={f} value={`"${f}"`}>{f}</option>)}
+                            </optgroup>
                         </select>
                      </div>
                      <div className="space-y-1">
@@ -143,6 +167,45 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, 
                              {align}
                          </button>
                      ))}
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-3 mt-3">
+                     <div className="space-y-1">
+                         <label className="text-[10px] text-text-muted flex items-center justify-between">
+                            Обводка (цвет)
+                            <input 
+                                type="color" 
+                                value={selectedClip.textData.outlineColor || '#000000'}
+                                onChange={(e) => handleTextUpdate('outlineColor', e.target.value)}
+                                className="w-4 h-4 rounded cursor-pointer bg-transparent border-none p-0"
+                            />
+                         </label>
+                         <input 
+                             type="range" min="0" max="20" step="1"
+                             value={selectedClip.textData.outlineWidth || 0}
+                             onChange={(e) => handleTextUpdate('outlineWidth', parseInt(e.target.value))}
+                             className="w-full accent-primary"
+                             title="Толщина обводки"
+                         />
+                     </div>
+                     <div className="space-y-1">
+                         <label className="text-[10px] text-text-muted flex items-center justify-between">
+                            Тень (цвет)
+                            <input 
+                                type="color" 
+                                value={selectedClip.textData.shadowColor || '#000000'}
+                                onChange={(e) => handleTextUpdate('shadowColor', e.target.value)}
+                                className="w-4 h-4 rounded cursor-pointer bg-transparent border-none p-0"
+                            />
+                         </label>
+                         <input 
+                             type="range" min="0" max="50" step="1"
+                             value={selectedClip.textData.shadowBlur || 0}
+                             onChange={(e) => handleTextUpdate('shadowBlur', parseInt(e.target.value))}
+                             className="w-full accent-primary"
+                             title="Размытие тени"
+                         />
+                     </div>
                  </div>
                  
                  <div className="h-px bg-text-muted/10 my-4"></div>
@@ -204,15 +267,36 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedClip, 
         <div className="space-y-2">
              <div className="flex justify-between items-center">
                  <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Прозрачность</h3>
-                 <span className="text-xs text-primary font-mono">{Math.round(selectedClip.opacity * 100)}%</span>
+                 <span className="text-xs text-primary font-mono">{Math.round((1 - selectedClip.opacity) * 100)}%</span>
              </div>
              <input 
                 type="range" min="0" max="1" step="0.01" 
-                value={selectedClip.opacity}
-                onChange={(e) => onUpdate({ opacity: parseFloat(e.target.value) })}
+                value={1 - selectedClip.opacity}
+                onChange={(e) => onUpdate({ opacity: 1 - parseFloat(e.target.value) })}
                 className="w-full accent-primary"
              />
         </div>
+
+        {selectedAsset && (selectedAsset.type === AssetType.VIDEO || selectedAsset.type === AssetType.AUDIO) && (
+            <>
+                <div className="h-px bg-text-muted/10"></div>
+                <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-1.5">
+                            <Volume2 size={14} className="text-text-muted" />
+                            <h3 className="text-[11px] font-bold text-text-muted uppercase tracking-wider">Громкость</h3>
+                        </div>
+                        <span className="text-xs text-primary font-mono">{Math.round((selectedClip.volume ?? 1) * 100)}%</span>
+                    </div>
+                    <input 
+                        type="range" min="0" max="2" step="0.05" 
+                        value={selectedClip.volume ?? 1}
+                        onChange={(e) => onUpdate({ volume: parseFloat(e.target.value) })}
+                        className="w-full accent-primary"
+                    />
+                </div>
+            </>
+        )}
 
         <div className="h-px bg-text-muted/10"></div>
 

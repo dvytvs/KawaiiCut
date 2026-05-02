@@ -1,7 +1,3 @@
-
-<img width="512" height="512" alt="icon" src="https://github.com/user-attachments/assets/503912e0-37a7-4f58-920d-5f0ec73c89da" />
-
-
 # ✨ KawaiiCut
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -12,7 +8,7 @@
 
 <a name="english"></a>
 
-**KawaiiCut** is a modern video editing application similar to Clipchamp, built with web technologies. It combines a sleek, dark-themed aesthetic with powerful editing capabilities, featuring a timeline, media management, text overlays, visual effects, and AI assistance.
+**KawaiiCut** is a modern video editing application similar to Clipchamp, built with web technologies. It combines a sleek, dark-themed aesthetic with powerful editing capabilities, featuring a timeline, media management, text overlays, and visual effects.
 
 > [!IMPORTANT]
 > **Project Origin:** This project was originally created for my personal needs and preferences. The source code is shared here just in case someone wants to modify or improve it for themselves. It was not intended for a mass audience, so feel free to do whatever you want with it.
@@ -26,7 +22,6 @@
 *   **Rich Text Editor:** Add stylish text with preset animations (Cyber, Retro, Neon, etc.) and custom fonts.
 *   **Visual Effects:** Apply effects like VHS Glitch, Snow, Rain, Blur, and more via drag-and-drop.
 *   **Keyframe-like Control:** Adjust scale, position, rotation, and opacity for every clip.
-*   **AI Assistant:** Built-in AI assistant (powered by Gemini) to help with editing tips.
 *   **Export:** Render your projects to MP4 with customizable resolution (up to 4K) and FPS.
 
 > [!CAUTION]
@@ -41,7 +36,6 @@
 *   **Language:** [TypeScript](https://www.typescriptlang.org/)
 *   **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 *   **Database:** [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) (via `idb`)
-*   **AI:** Google Gemini API
 
 ## 🚀 Getting Started
 
@@ -62,9 +56,6 @@
     ```bash
     npm install
     ```
-
-3.  **Setup API Key (Optional for AI features):**
-    Create a `.env` file or set the environment variable `API_KEY` with your Google Gemini API key to enable the AI assistant.
 
 ### Running in Development
 
@@ -97,7 +88,7 @@ The output files (AppImage, deb, snap, etc.) will be located in the `release/` d
 
 # 🇷🇺 KawaiiCut (Описание на русском)
 
-**KawaiiCut** — это современное приложение для видеомонтажа, схожее с Clipchamp, созданное с использованием веб-технологий. Оно сочетает в себе эстетичный темный интерфейс с мощными возможностями редактирования, включая мультитрековый таймлайн, управление медиафайлами, стильные титры, визуальные эффекты и AI-ассистента.
+**KawaiiCut** — это современное приложение для видеомонтажа, схожее с Clipchamp, созданное с использованием веб-технологий. Оно сочетает в себе эстетичный темный интерфейс с мощными возможностями редактирования, включая мультитрековый таймлайн, управление медиафайлами, стильные титры и визуальные эффекты.
 
 > [!IMPORTANT]
 > **О проекте:** Этот проект изначально создавался исключительно под мои личные хотелки и нужды. Исходный код выложен просто на случай, если кому-то захочется что-то поменять или доработать под себя. Программа не создавалась для широких масс, так что делайте с ней что хотите.
@@ -109,7 +100,6 @@ The output files (AppImage, deb, snap, etc.) will be located in the `release/` d
 *   **Редактор текста:** Добавление стильного текста с пресетами (Кибер, Ретро, Неон и др.) и кастомными шрифтами.
 *   **Визуальные эффекты:** Применение эффектов, таких как VHS-глитч, Снег, Дождь, Размытие и других, простым перетаскиванием.
 *   **Настройка клипов:** Регулировка масштаба, позиции, поворота, прозрачности и скорости воспроизведения.
-*   **AI Ассистент:** Встроенный помощник (на базе Gemini), который поможет советами по монтажу.
 *   **Экспорт:** Рендеринг проектов в MP4 с настраиваемым разрешением (до 4K) и FPS (30/60).
 
 > [!CAUTION]
@@ -124,7 +114,6 @@ The output files (AppImage, deb, snap, etc.) will be located in the `release/` d
 *   **Язык:** TypeScript
 *   **Стили:** Tailwind CSS
 *   **База данных:** IndexedDB (через `idb`)
-*   **ИИ:** Google Gemini API
 
 ## 🚀 Начало работы
 
@@ -145,9 +134,6 @@ The output files (AppImage, deb, snap, etc.) will be located in the `release/` d
     ```bash
     npm install
     ```
-
-3.  **Настройка API ключа (Опционально для AI):**
-    Создайте файл `.env` в корне проекта и добавьте переменную `API_KEY` с вашим ключом Google Gemini API, чтобы включить ассистента.
 
 ### Запуск (Режим разработки)
 

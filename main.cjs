@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -17,6 +17,22 @@ function createWindow() {
 
   // Remove menu completely
   mainWindow.setMenuBarVisibility(false);
+
+  // Handle external links
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL() && url.startsWith('http') && !url.includes('localhost:3000')) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
 
   // In development, load from the Vite dev server
   if (!app.isPackaged) {

@@ -164,6 +164,24 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
               audioCache.current[asset.src] = { el: aud };
           }
       });
+
+      // Cleanup removed assets
+      const assetSrcs = assets.map(a => a.src);
+      Object.keys(imageCache.current).forEach(src => {
+          if (!assetSrcs.includes(src)) delete imageCache.current[src];
+      });
+      Object.keys(videoCache.current).forEach(src => {
+          if (!assetSrcs.includes(src)) {
+              if (videoCache.current[src].source) videoCache.current[src].source!.disconnect();
+              delete videoCache.current[src];
+          }
+      });
+      Object.keys(audioCache.current).forEach(src => {
+          if (!assetSrcs.includes(src)) {
+              if (audioCache.current[src].source) audioCache.current[src].source!.disconnect();
+              delete audioCache.current[src];
+          }
+      });
   }, [assets]);
 
   // --- SYNC MEDIA WITH TIMELINE ---
@@ -181,7 +199,7 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
           el.muted = false; // We control volume via gain, but source needs to be unmuted. 
           // Actually for createMediaElementSource to work, element shouldn't be muted, 
           // but we can disconnect source if muted. Simpler: set volume on element.
-          el.volume = isMuted ? 0 : 1;
+          el.volume = isMuted ? 0 : Math.min(1, Math.max(0, activeClip?.volume ?? 1));
 
           if (activeClip) {
               const videoTime = (currentTime - activeClip.startTime) * activeClip.speed + activeClip.offset;
@@ -214,7 +232,7 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
 
           const track = activeClip ? tracks.find(t => t.id === activeClip.trackId) : null;
           const isMuted = track?.isMuted || false;
-          el.volume = isMuted ? 0 : 1;
+          el.volume = isMuted ? 0 : Math.min(1, Math.max(0, activeClip?.volume ?? 1));
 
           if (activeClip) {
               const audioTime = (currentTime - activeClip.startTime) * activeClip.speed + activeClip.offset;
@@ -247,15 +265,24 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
       if (!ctx) return;
 
       // Layout Logic
-      let targetW = containerSize.width;
-      let targetH = containerSize.height;
+      let cssW = containerSize.width;
+      let cssH = containerSize.height;
       let ratio = 16 / 9;
       if (aspectRatio === '9:16') ratio = 9 / 16;
       else if (aspectRatio === '1:1') ratio = 1;
       else if (aspectRatio === '4:3') ratio = 4 / 3;
 
-      if (targetW / targetH > ratio) targetW = targetH * ratio;
-      else targetH = targetW / ratio;
+      if (cssW / cssH > ratio) cssW = cssH * ratio;
+      else cssH = cssW / ratio;
+
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+
+      let targetW = 1920;
+      let targetH = 1080;
+      if (aspectRatio === '9:16') { targetW = 1080; targetH = 1920; }
+      else if (aspectRatio === '1:1') { targetW = 1080; targetH = 1080; }
+      else if (aspectRatio === '4:3') { targetW = 1440; targetH = 1080; }
 
       // Set Canvas Size
       if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -290,7 +317,12 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
           const cx = targetW / 2;
           const cy = targetH / 2;
 
-          ctx.translate(cx + clip.x, cy + clip.y);
+          const referenceW = 1920;
+          const referenceH = 1080;
+          const scaleX = targetW / referenceW;
+          const scaleY = targetH / referenceH;
+
+          ctx.translate(cx + (clip.x || 0) * scaleX, cy + (clip.y || 0) * scaleY);
           ctx.rotate((clip.rotation * Math.PI) / 180);
           ctx.scale(clip.scale * (clip.mirror ? -1 : 1), clip.scale);
           ctx.globalAlpha = clip.opacity;
@@ -321,7 +353,7 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
               }
           } else if (asset.type === AssetType.TEXT && clip.textData) {
               const td = clip.textData;
-              ctx.font = `${td.isItalic ? 'italic ' : ''}${td.isBold ? 'bold ' : ''}${td.fontSize}px "${td.fontFamily.split(',')[0]}"`;
+              ctx.font = `${td.isItalic ? 'italic ' : ''}${td.isBold ? 'bold ' : ''}${td.fontSize}px "${td.fontFamily.split(',')[0].replace(/['"]/g, '')}"`;
               ctx.textAlign = td.align;
               ctx.textBaseline = 'middle';
               if (td.shadowColor) {
@@ -376,7 +408,12 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
               const cx = targetW / 2;
               const cy = targetH / 2;
               
-              ctx.translate(cx + clip.x, cy + clip.y);
+              const referenceW = 1920;
+              const referenceH = 1080;
+              const scaleX = targetW / referenceW;
+              const scaleY = targetH / referenceH;
+
+              ctx.translate(cx + (clip.x || 0) * scaleX, cy + (clip.y || 0) * scaleY);
               ctx.rotate((clip.rotation * Math.PI) / 180);
               
               // Calculate bounds
@@ -422,9 +459,11 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
       const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
       return {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
+          x: (e.clientX - rect.left) * scaleX,
+          y: (e.clientY - rect.top) * scaleY
       };
   };
 
@@ -438,10 +477,15 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
       if (!canvas) return;
       
       // Convert pos to clip-relative space
+      const referenceW = 1920;
+      const referenceH = 1080;
+      const scaleX = canvas.width / referenceW;
+      const scaleY = canvas.height / referenceH;
+
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
-      const dx = pos.x - (cx + clip.x);
-      const dy = pos.y - (cy + clip.y);
+      const dx = pos.x - (cx + (clip.x || 0) * scaleX);
+      const dy = pos.y - (cy + (clip.y || 0) * scaleY);
       
       // Rotate back
       const rad = (-clip.rotation * Math.PI) / 180;
@@ -500,23 +544,36 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(({
       const dy = pos.y - dragStart.y;
       
       if (transformMode === 'move') {
+          const referenceW = 1920;
+          const referenceH = 1080;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          
+          const invScaleX = referenceW / canvas.width;
+          const invScaleY = referenceH / canvas.height;
+
           onUpdateClip(selectedClipId, {
-              x: (initialClipState.x || 0) + dx,
-              y: (initialClipState.y || 0) + dy
+              x: (initialClipState.x || 0) + dx * invScaleX,
+              y: (initialClipState.y || 0) + dy * invScaleY
           });
       } else if (transformMode === 'resize') {
           const canvas = canvasRef.current;
           if (!canvas) return;
           const cx = canvas.width / 2;
           const cy = canvas.height / 2;
+
+          const referenceW = 1920;
+          const referenceH = 1080;
+          const scaleX = canvas.width / referenceW;
+          const scaleY = canvas.height / referenceH;
           
           const distInitial = Math.sqrt(
-              Math.pow(dragStart.x - (cx + (initialClipState.x || 0)), 2) + 
-              Math.pow(dragStart.y - (cy + (initialClipState.y || 0)), 2)
+              Math.pow(dragStart.x - (cx + (initialClipState.x || 0) * scaleX), 2) + 
+              Math.pow(dragStart.y - (cy + (initialClipState.y || 0) * scaleY), 2)
           );
           const distCurrent = Math.sqrt(
-              Math.pow(pos.x - (cx + (initialClipState.x || 0)), 2) + 
-              Math.pow(pos.y - (cy + (initialClipState.y || 0)), 2)
+              Math.pow(pos.x - (cx + (initialClipState.x || 0) * scaleX), 2) + 
+              Math.pow(pos.y - (cy + (initialClipState.y || 0) * scaleY), 2)
           );
           
           const scaleFactor = distCurrent / distInitial;

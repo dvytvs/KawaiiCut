@@ -1,12 +1,12 @@
 {
   "name": "KawaiiCut",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "A video editing application similar to Clipchamp",
   "main": "main.cjs",
   "scripts": {
     "dev": "vite",
-    "start": "concurrently \"vite\" \"wait-on tcp:3000 && electron .\"",
+    "start": "concurrently \"vite --host 127.0.0.1\" \"wait-on http-get://127.0.0.1:3000 && electron .\"",
     "build": "tsc && vite build",
     "dist": "npm run build && electron-builder",
     "preview": "vite preview",
@@ -31,9 +31,15 @@
         "pacman",
         "snap",
         "tar.gz",
-        "AppImage"
+        "AppImage",
+        "flatpak"
       ],
       "category": "Video"
+    },
+    "flatpak": {
+      "runtimeVersion": "25.08",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "25.08"
     },
     "files": [
       "dist/**/*",

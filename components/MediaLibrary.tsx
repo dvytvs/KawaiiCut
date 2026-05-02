@@ -14,9 +14,40 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({ assets, onAddAsset, 
   const [filter, setFilter] = useState<'all' | 'video' | 'image' | 'audio'>('all');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       onAddAsset(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      for (const file of files) {
+        if (file.type.startsWith('video') || file.type.startsWith('image') || file.type.startsWith('audio')) {
+           onAddAsset(file);
+        }
+      }
     }
   };
 
@@ -42,7 +73,20 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({ assets, onAddAsset, 
   });
 
   return (
-    <div className="flex flex-col h-full bg-bg-panel text-text-main relative">
+    <div 
+        className={`flex flex-col h-full bg-bg-panel text-text-main relative transition-colors ${isDragOver ? 'bg-primary/10 border-2 border-primary border-dashed rounded-lg' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+    >
+      {isDragOver && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-none rounded-lg">
+              <div className="bg-primary px-6 py-4 rounded-xl flex flex-col items-center gap-3 shadow-2xl">
+                  <Plus size={32} className="text-white animate-bounce" />
+                  <p className="text-white font-bold text-lg text-center">Опустите файлы сюда<br/><span className="text-sm font-medium opacity-80">Видео, Фото, Аудио</span></p>
+              </div>
+          </div>
+      )}
       {/* Header */}
       <div className="p-4 border-b border-black/20">
         <div className="flex items-center justify-between mb-4">

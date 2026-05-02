@@ -19,10 +19,14 @@ interface KawaiiDB extends DBSchema {
     key: string;
     value: AppSettings;
   };
+  fonts: {
+    key: string;
+    value: { name: string; dataUrl: string };
+  };
 }
 
 const DB_NAME = 'KawaiiCutDB';
-const DB_VERSION = 2; // Incremented version for new stores
+const DB_VERSION = 3; // Incremented version for new stores
 
 export const initDB = async () => {
   return openDB<KawaiiDB>(DB_NAME, DB_VERSION, {
@@ -39,6 +43,9 @@ export const initDB = async () => {
       }
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings');
+      }
+      if (!db.objectStoreNames.contains('fonts')) {
+        db.createObjectStore('fonts', { keyPath: 'name' });
       }
     },
   });
@@ -134,6 +141,23 @@ export const saveAppSettings = async (settings: AppSettings) => {
 export const loadAppSettings = async (): Promise<AppSettings | undefined> => {
     const db = await initDB();
     return db.get('settings', 'currentSettings');
+};
+
+// --- Global Fonts ---
+
+export const saveGlobalFont = async (name: string, dataUrl: string) => {
+    const db = await initDB();
+    await db.put('fonts', { name, dataUrl });
+};
+
+export const loadGlobalFonts = async (): Promise<{ name: string; dataUrl: string }[]> => {
+    const db = await initDB();
+    return db.getAll('fonts');
+};
+
+export const deleteGlobalFont = async (name: string) => {
+    const db = await initDB();
+    await db.delete('fonts', name);
 };
 
 // Helper
